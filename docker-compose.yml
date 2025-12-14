@@ -1,0 +1,54 @@
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: amor-db
+    environment:
+      POSTGRES_DB: amor_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: amor-api
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/amor_db?schema=public
+      JWT_SECRET: amor-secret-key-change-in-production
+      JWT_REFRESH_SECRET: amor-refresh-secret-change-in-production
+      PORT: 3001
+      NODE_ENV: development
+    ports:
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "npx prisma db push --skip-generate && npm run db:seed || true && npm run dev"
+
+  # Frontend Web App
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: amor-web
+    environment:
+      VITE_API_URL: http://localhost:3001/api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+
