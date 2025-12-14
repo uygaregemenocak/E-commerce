@@ -34,14 +34,14 @@ type User = {
 
 type AuthContextType = {
   user: User;
-  login: (email: string, password: string, role?: string) => void;
+  login: (email: string, password: string, role?: string, userData?: any) => void;
   logout: () => void;
 };
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
-  login: () => {},
-  logout: () => {},
+  login: () => { },
+  logout: () => { },
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -69,7 +69,7 @@ function AppContent() {
         <Route path="/order-confirmation" element={<OrderConfirmation />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        
+
         {/* Admin Routes */}
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/products" element={<AllProducts />} />
@@ -91,18 +91,35 @@ function AppContent() {
 export default function App() {
   const [user, setUser] = useState<User>(null);
 
-  const login = (email: string, _password: string, role?: string) => {
-    const userRole = (role || 'customer') as UserRole;
-    setUser({
-      id: '1',
-      name: email.split('@')[0],
-      email,
-      role: userRole,
-    });
+  React.useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
+
+  const login = (email: string, _password: string, role?: string, userData?: any) => {
+    if (userData) {
+      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(userData));
+    } else {
+      // Fallback for legacy calls (though we should update them)
+      const userRole = (role || 'customer') as UserRole;
+      const newUser = {
+        id: '1', // Warning: This should be replaced by real ID
+        name: email.split('@')[0],
+        email,
+        role: userRole,
+      };
+      setUser(newUser);
+      localStorage.setItem('user', JSON.stringify(newUser));
+    }
   };
 
   const logout = () => {
     setUser(null);
+    localStorage.removeItem('user');
+    localStorage.removeItem('accessToken');
   };
 
   const authValue = { user, login, logout };

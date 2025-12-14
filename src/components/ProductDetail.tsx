@@ -6,6 +6,7 @@ import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { useCart } from '../stores/cartStore';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { useAuth } from '../App';
 // Define Product type to match API response
 interface ProductVariant {
   id: string;
@@ -29,6 +30,14 @@ interface Category {
   slug: string;
 }
 
+interface Review {
+  id: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  user: { name: string };
+}
+
 interface Product {
   id: string;
   name: string;
@@ -41,6 +50,7 @@ interface Product {
   images: ProductImage[];
   variants: ProductVariant[];
   relatedProducts?: Product[];
+  reviews?: Review[];
 }
 
 export function ProductDetail() {
@@ -56,6 +66,51 @@ export function ProductDetail() {
   const [selectedColor, setSelectedColor] = useState('');
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const { user } = useAuth();
+
+  const [newReview, setNewReview] = useState({ rating: 5, comment: '' });
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [hoverRating, setHoverRating] = useState(0);
+
+  const handleSubmitReview = async () => {
+    if (!productId) return;
+
+    setSubmittingReview(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`/api/products/${productId}/reviews`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(newReview)
+      });
+
+      if (!response.ok) throw new Error('Failed to submit review');
+
+      const { data } = await response.json();
+
+      // Update local state to show new review
+      if (product) {
+        setProduct({
+          ...product,
+          reviews: [
+            { ...data, user: { name: user?.name || 'You' } },
+            ...(product.reviews || [])
+          ]
+        });
+      }
+
+      setNewReview({ rating: 5, comment: '' });
+      alert('Review submitted successfully!');
+    } catch (error) {
+      console.error('Failed to submit review:', error);
+      alert('Failed to submit review. Please try again.');
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
 
   // Debug: Log when component mounts or productId changes
   useEffect(() => {
@@ -279,6 +334,7 @@ export function ProductDetail() {
       </div>
     );
   }
+  if (!product) return null;
 
   const productPrice = typeof product.basePrice === 'string' ? parseFloat(product.basePrice) : product.basePrice;
   const primaryImage = product.images.find(img => img.isPrimary) || product.images[0];
@@ -287,6 +343,11 @@ export function ProductDetail() {
     if (b.isPrimary) return 1;
     return 0;
   });
+
+  const reviews = product.reviews || [];
+  const averageRating = reviews.length > 0
+    ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+    : 0;
 
   return (
     <div className="min-h-screen bg-neutral-50">
@@ -332,11 +393,13 @@ export function ProductDetail() {
                   {[...Array(5)].map((_, i) => (
                     <Star
                       key={i}
-                      className="w-4 h-4 fill-amber-500 text-amber-500"
+                      className={`w-4 h-4 ${i < Math.round(averageRating) ? 'fill-amber-500 text-amber-500' : 'text-neutral-300'}`}
                     />
                   ))}
                 </div>
-                <span className="text-sm text-neutral-600">5.0 (12 reviews)</span>
+                <span className="text-sm text-neutral-600">
+                  {averageRating.toFixed(1)} ({reviews.length} reviews)
+                </span>
               </div>
               <p className="text-3xl text-neutral-900">${productPrice.toLocaleString()}</p>
             </div>
@@ -508,25 +571,87 @@ export function ProductDetail() {
             </div>
           </TabsContent>
           <TabsContent value="reviews" className="bg-white rounded-lg p-8">
-            <h3 className="text-xl text-neutral-900 mb-6">Customer Reviews</h3>
-            <div className="space-y-6">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="border-b border-neutral-200 pb-6 last:border-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="flex gap-0.5">
-                      {[...Array(5)].map((_, j) => (
-                        <Star key={j} className="w-4 h-4 fill-amber-500 text-amber-500" />
+            {user ? (
+              <div className="bg-neutral-50 rounded-lg p-6 mb-8">
+                <h4 className="text-lg font-medium mb-4">Write a Review</h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-neutral-700 mb-2">Rating</label>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setNewReview({ ...newReview, rating: star })}
+                          onMouseEnter={() => setHoverRating(star)}
+                          onMouseLeave={() => setHoverRating(0)}
+                          className="focus:outline-none"
+                        >
+                          <Star
+                            className={`w-6 h-6 ${star <= (hoverRating || newReview.rating)
+                              ? 'fill-amber-500 text-amber-500'
+                              : 'text-neutral-300'
+                              }`}
+                          />
+                        </button>
                       ))}
                     </div>
-                    <span className="text-sm text-neutral-600">Verified Purchaser</span>
                   </div>
-                  <p className="text-neutral-700 mb-2">
-                    Exceptional quality and fit. Worth every penny. The attention to detail is remarkable.
-                  </p>
-                  <p className="text-xs text-neutral-500">Posted 2 weeks ago</p>
+                  <div>
+                    <label className="block text-sm text-neutral-700 mb-2">Comment</label>
+                    <textarea
+                      value={newReview.comment}
+                      onChange={(e) => setNewReview({ ...newReview, comment: e.target.value })}
+                      className="w-full rounded-md border border-neutral-300 p-3 text-sm focus:border-black focus:ring-black"
+                      rows={3}
+                      placeholder="Share your thoughts about this product..."
+                    />
+                  </div>
+                  <Button
+                    onClick={handleSubmitReview}
+                    disabled={submittingReview}
+                    className="bg-black text-white hover:bg-neutral-800"
+                  >
+                    {submittingReview ? 'Submitting...' : 'Submit Review'}
+                  </Button>
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : (
+              <div className="bg-neutral-50 rounded-lg p-6 mb-8 text-center">
+                <p className="text-neutral-600 mb-4">Please log in to write a review.</p>
+                <Button onClick={() => navigate('/login')} variant="outline">Log In</Button>
+              </div>
+            )}
+
+            <h3 className="text-xl text-neutral-900 mb-6">Customer Reviews</h3>
+            {reviews.length === 0 ? (
+              <p className="text-neutral-500">No reviews yet. Be the first to review!</p>
+            ) : (
+              <div className="space-y-6">
+                {reviews.map((review) => (
+                  <div key={review.id} className="border-b border-neutral-200 pb-6 last:border-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex gap-0.5">
+                        {[...Array(5)].map((_, j) => (
+                          <Star
+                            key={j}
+                            className={`w-4 h-4 ${j < review.rating ? 'fill-amber-500 text-amber-500' : 'text-neutral-300'}`}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-sm text-neutral-600">Verified Purchaser</span>
+                    </div>
+                    <div className="text-sm text-neutral-900 font-medium mb-1">{review.user?.name}</div>
+                    <p className="text-neutral-700 mb-2">
+                      {review.comment}
+                    </p>
+                    <p className="text-xs text-neutral-500">
+                      Posted {new Date(review.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </TabsContent>
         </Tabs>
 

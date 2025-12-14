@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AdminLayout } from './AdminLayout';
 import { TrendingUp, Users, Package, DollarSign, Eye } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { useAuth } from '../../App';
 
 const kpiData = [
   { label: 'Total Orders', value: '1,248', change: '+12.5%', icon: Package, trend: 'up' },
@@ -45,7 +46,33 @@ const recentOrders = [
 ];
 
 export function AdminDashboard() {
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const [stats, setStats] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const fetchDashboard = async () => {
+      try {
+        const token = localStorage.getItem('accessToken');
+        const response = await fetch('/api/admin/dashboard', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const data = await response.json();
+        if (data.success) {
+          setStats(data.data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch dashboard:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboard();
+  }, []);
 
   const onNavigate = (page: string) => {
     const routeMap: Record<string, string> = {
@@ -57,24 +84,47 @@ export function AdminDashboard() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Delivered':
+      case 'delivered':
         return 'bg-green-100 text-green-800';
       case 'Shipped':
+      case 'shipped':
         return 'bg-blue-100 text-blue-800';
       case 'Paid':
+      case 'paid':
         return 'bg-purple-100 text-purple-800';
       case 'Processing':
+      case 'processing':
+      case 'pending':
         return 'bg-amber-100 text-amber-800';
       default:
         return 'bg-neutral-100 text-neutral-800';
     }
   };
 
+  if (loading) return (
+    <AdminLayout currentPage="admin-dashboard">
+      <div className="p-8">Loading dashboard...</div>
+    </AdminLayout>
+  );
+
+  const realKpiData = stats ? [
+    { label: 'Total Orders', value: stats.kpi.orders.toLocaleString(), change: '+0%', icon: Package, trend: 'up' },
+    { label: 'Revenue', value: `$${stats.kpi.revenue.toLocaleString()}`, change: '+0%', icon: DollarSign, trend: 'up' },
+    { label: 'Customers', value: stats.kpi.customers.toLocaleString(), change: '+0%', icon: Users, trend: 'up' },
+    { label: 'Low Stock Items', value: stats.kpi.lowStock.toLocaleString(), change: 'Alert', icon: Package, trend: 'down' },
+  ] : kpiData;
+
+  const realRecentOrders = stats ? stats.recentOrders : recentOrders;
+  const realOrdersData = stats?.charts?.ordersData || ordersData;
+  const realProductsData = stats?.charts?.productsData || productsData;
+  const realCategoryData = stats?.charts?.categoryData || categoryData;
+
   return (
     <AdminLayout currentPage="admin-dashboard">
       <div className="space-y-8">
         {/* KPI Cards */}
         <div className="grid grid-cols-4 gap-6">
-          {kpiData.map((kpi, index) => {
+          {realKpiData.map((kpi: any, index: number) => {
             const Icon = kpi.icon;
             return (
               <div key={index} className="bg-white rounded-lg p-6 border border-neutral-200">
@@ -99,7 +149,7 @@ export function AdminDashboard() {
           <div className="bg-white rounded-lg p-6 border border-neutral-200">
             <h3 className="text-lg text-neutral-900 mb-6">Orders This Week</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={ordersData}>
+              <LineChart data={realOrdersData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                 <XAxis dataKey="date" stroke="#737373" />
                 <YAxis stroke="#737373" />
@@ -113,7 +163,7 @@ export function AdminDashboard() {
           <div className="bg-white rounded-lg p-6 border border-neutral-200">
             <h3 className="text-lg text-neutral-900 mb-6">Best Selling Products</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={productsData}>
+              <BarChart data={realProductsData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                 <XAxis dataKey="name" stroke="#737373" />
                 <YAxis stroke="#737373" />
@@ -131,7 +181,7 @@ export function AdminDashboard() {
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
-                  data={categoryData}
+                  data={realCategoryData}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
@@ -140,7 +190,7 @@ export function AdminDashboard() {
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {categoryData.map((entry, index) => (
+                  {realCategoryData.map((entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -148,7 +198,7 @@ export function AdminDashboard() {
               </PieChart>
             </ResponsiveContainer>
             <div className="mt-4 space-y-2">
-              {categoryData.map((item, index) => (
+              {realCategoryData.map((item: any, index: number) => (
                 <div key={index} className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded" style={{ backgroundColor: item.color }}></div>
@@ -164,7 +214,7 @@ export function AdminDashboard() {
           <div className="col-span-2 bg-white rounded-lg border border-neutral-200 overflow-hidden">
             <div className="p-6 border-b border-neutral-200 flex items-center justify-between">
               <h3 className="text-lg text-neutral-900">Latest Orders</h3>
-              <button 
+              <button
                 onClick={() => onNavigate('admin-orders')}
                 className="text-sm text-amber-600 hover:text-amber-700"
               >
@@ -184,7 +234,7 @@ export function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {recentOrders.map((order) => (
+                  {realRecentOrders.map((order: any) => (
                     <tr key={order.id} className="border-b border-neutral-100 hover:bg-neutral-50">
                       <td className="py-4 px-6">
                         <span className="text-sm text-neutral-900">{order.id}</span>

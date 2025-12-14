@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Navigation } from './Navigation';
 import { Check } from 'lucide-react';
@@ -15,25 +15,86 @@ import {
 } from './ui/select';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { useCart } from '../stores/cartStore';
+import { useAuth } from '../App';
+import { ordersApi } from '../api/orders';
+import { toast } from 'sonner';
 
 export function Checkout() {
   const navigate = useNavigate();
   const { items, getSubtotal, clearCart } = useCart();
+  const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [deliveryMethod, setDeliveryMethod] = useState('standard');
   const [paymentMethod, setPaymentMethod] = useState('card');
+  const [loading, setLoading] = useState(false);
+
+  // Address State
+  const [shippingAddress, setShippingAddress] = useState({
+    fullName: '',
+    street: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    phone: ''
+  });
 
   const subtotal = getSubtotal();
   const shipping = deliveryMethod === 'express' ? 50 : (subtotal > 500 ? 0 : 25);
   const total = subtotal + shipping;
 
-  const handlePlaceOrder = () => {
-    // Clear cart and navigate to order confirmation
-    clearCart();
-    navigate('/order-confirmation');
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!user) {
+      // Small delay to ensure auth check is complete
+      const timer = setTimeout(() => {
+        const token = localStorage.getItem('accessToken');
+        if (!token) {
+          toast.error('Please login to checkout');
+          navigate('/login');
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [user, navigate]);
+
+  const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { id, value } = e.target;
+    setShippingAddress(prev => ({ ...prev, [id]: value }));
   };
 
-  // Redirect to cart if empty
+  const handleStateChange = (value: string) => {
+    setShippingAddress(prev => ({ ...prev, state: value }));
+  };
+
+  const handlePlaceOrder = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('accessToken') || '';
+
+      await ordersApi.createOrder({
+        shippingAddress: {
+          street: shippingAddress.street,
+          city: shippingAddress.city,
+          state: shippingAddress.state,
+          zipCode: shippingAddress.zipCode,
+          country: 'USA'
+        },
+        paymentMethod,
+        deliveryMethod
+      }, token);
+
+      clearCart();
+      toast.success('Order placed successfully!');
+      navigate('/order-confirmation');
+    } catch (error: any) {
+      console.error('Checkout failed:', error);
+      toast.error(error.message || 'Failed to place order');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Redirect to cart if empty (and not just checking auth)
   if (items.length === 0) {
     return (
       <div className="min-h-screen bg-neutral-50">
@@ -67,18 +128,16 @@ export function Checkout() {
               <React.Fragment key={item.num}>
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-                      step >= item.num
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${step >= item.num
                         ? 'bg-black text-white'
                         : 'bg-neutral-200 text-neutral-500'
-                    }`}
+                      }`}
                   >
                     {step > item.num ? <Check className="w-5 h-5" /> : item.num}
                   </div>
                   <span
-                    className={`text-sm ${
-                      step >= item.num ? 'text-neutral-900' : 'text-neutral-500'
-                    }`}
+                    className={`text-sm ${step >= item.num ? 'text-neutral-900' : 'text-neutral-500'
+                      }`}
                   >
                     {item.label}
                   </span>
@@ -101,40 +160,74 @@ export function Checkout() {
                 <div className="grid grid-cols-2 gap-6">
                   <div className="col-span-2">
                     <Label htmlFor="fullName">Full Name</Label>
-                    <Input id="fullName" placeholder="John Doe" className="mt-2" />
+                    <Input
+                      id="fullName"
+                      placeholder="John Doe"
+                      className="mt-2"
+                      value={shippingAddress.fullName}
+                      onChange={handleAddressChange}
+                    />
                   </div>
                   <div className="col-span-2">
-                    <Label htmlFor="address">Street Address</Label>
-                    <Input id="address" placeholder="123 Main Street" className="mt-2" />
+                    <Label htmlFor="street">Street Address</Label>
+                    <Input
+                      id="street"
+                      placeholder="123 Main Street"
+                      className="mt-2"
+                      value={shippingAddress.street}
+                      onChange={handleAddressChange}
+                    />
                   </div>
                   <div>
                     <Label htmlFor="city">City</Label>
-                    <Input id="city" placeholder="New York" className="mt-2" />
+                    <Input
+                      id="city"
+                      placeholder="New York"
+                      className="mt-2"
+                      value={shippingAddress.city}
+                      onChange={handleAddressChange}
+                    />
                   </div>
                   <div>
                     <Label htmlFor="state">State</Label>
-                    <Select>
+                    <Select onValueChange={handleStateChange} value={shippingAddress.state}>
                       <SelectTrigger id="state" className="mt-2">
                         <SelectValue placeholder="Select state" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="ny">New York</SelectItem>
-                        <SelectItem value="ca">California</SelectItem>
-                        <SelectItem value="tx">Texas</SelectItem>
+                        <SelectItem value="NY">New York</SelectItem>
+                        <SelectItem value="CA">California</SelectItem>
+                        <SelectItem value="TX">Texas</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="zip">ZIP Code</Label>
-                    <Input id="zip" placeholder="10001" className="mt-2" />
+                    <Label htmlFor="zipCode">ZIP Code</Label>
+                    <Input
+                      id="zipCode"
+                      placeholder="10001"
+                      className="mt-2"
+                      value={shippingAddress.zipCode}
+                      onChange={handleAddressChange}
+                    />
                   </div>
                   <div>
                     <Label htmlFor="phone">Phone Number</Label>
-                    <Input id="phone" placeholder="+1 (555) 000-0000" className="mt-2" />
+                    <Input
+                      id="phone"
+                      placeholder="+1 (555) 000-0000"
+                      className="mt-2"
+                      value={shippingAddress.phone}
+                      onChange={handleAddressChange}
+                    />
                   </div>
                 </div>
                 <div className="mt-8 flex justify-end">
-                  <Button onClick={() => setStep(2)} className="bg-black hover:bg-neutral-800">
+                  <Button
+                    onClick={() => setStep(2)}
+                    className="bg-black hover:bg-neutral-800"
+                    disabled={!shippingAddress.street || !shippingAddress.city || !shippingAddress.zipCode}
+                  >
                     Continue to Delivery
                   </Button>
                 </div>
@@ -228,8 +321,12 @@ export function Checkout() {
                   <Button onClick={() => setStep(2)} variant="outline">
                     Back
                   </Button>
-                  <Button onClick={handlePlaceOrder} className="bg-black hover:bg-neutral-800">
-                    Place Order
+                  <Button
+                    onClick={handlePlaceOrder}
+                    className="bg-black hover:bg-neutral-800"
+                    disabled={loading}
+                  >
+                    {loading ? 'Processing...' : 'Place Order'}
                   </Button>
                 </div>
               </div>

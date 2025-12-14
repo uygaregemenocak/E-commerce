@@ -8,6 +8,7 @@ const productController = new ProductController();
 // Public routes
 router.get('/', productController.getAll);
 router.get('/:id', productController.getById);
+router.post('/:id/reviews', authenticate, productController.addReview);
 
 // Admin routes
 router.post('/', authenticate, authorize('admin', 'store-manager'), productController.create);

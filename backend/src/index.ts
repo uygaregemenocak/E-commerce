@@ -7,6 +7,7 @@ import { cartRoutes } from './routes/cart';
 import { orderRoutes } from './routes/orders';
 import { customerRoutes } from './routes/customers';
 import { returnRoutes } from './routes/returns';
+import { adminRoutes } from './routes/admin';
 import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -20,6 +21,8 @@ app.use(cors({
     'http://127.0.0.1:3000',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'http://localhost:3002',
+    'http://127.0.0.1:3002',
   ],
   credentials: true,
 }));
@@ -33,6 +36,7 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/returns', returnRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check
 app.get('/api/health', (_, res) => {
@@ -45,4 +49,3 @@ app.use(errorHandler);
 app.listen(Number(PORT), HOST, () => {
   console.log(`🚀 Server running on http://${HOST}:${PORT}`);
 });
-

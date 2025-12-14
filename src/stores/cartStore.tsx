@@ -81,10 +81,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [sessionId]);
 
   const getHeaders = () => {
-    return {
+    const token = localStorage.getItem('accessToken');
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'x-session-id': sessionId,
     };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
   };
 
   const fetchCart = async () => {

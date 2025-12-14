@@ -15,6 +15,105 @@ const updateItemSchema = z.object({
 
 export class CartController {
   private getOrCreateCart = async (userId?: string, sessionId?: string) => {
+    // 1. Try to find cart by userId
+    if (userId) {
+      let userCart = await prisma.cart.findFirst({
+        where: { userId },
+        include: {
+          items: {
+            include: {
+              variant: {
+                include: {
+                  product: {
+                    include: {
+                      images: { where: { isPrimary: true }, take: 1 },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // 2. Check if there is a session cart to merge
+      if (sessionId) {
+        const sessionCart = await prisma.cart.findFirst({
+          where: { sessionId, userId: null },
+          include: { items: true },
+        });
+
+        if (sessionCart) {
+          if (!userCart) {
+            // If no user cart, simply claim the session cart
+            userCart = await prisma.cart.update({
+              where: { id: sessionCart.id },
+              data: { userId },
+              include: {
+                items: {
+                  include: {
+                    variant: {
+                      include: {
+                        product: {
+                          include: {
+                            images: { where: { isPrimary: true }, take: 1 },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              }
+            });
+          } else {
+            // Merge items: move session items to user cart
+            for (const item of sessionCart.items) {
+              // Check if item exists in user cart
+              const existing = await prisma.cartItem.findFirst({
+                where: { cartId: userCart.id, variantId: item.variantId }
+              });
+
+              if (existing) {
+                await prisma.cartItem.update({
+                  where: { id: existing.id },
+                  data: { quantity: existing.quantity + item.quantity }
+                });
+              } else {
+                await prisma.cartItem.create({
+                  data: { cartId: userCart.id, variantId: item.variantId, quantity: item.quantity }
+                });
+              }
+            }
+            // Delete old session cart
+            await prisma.cart.delete({ where: { id: sessionCart.id } });
+
+            // Refetch to get updated items
+            userCart = await prisma.cart.findFirst({
+              where: { id: userCart.id },
+              include: {
+                items: {
+                  include: {
+                    variant: {
+                      include: {
+                        product: {
+                          include: {
+                            images: { where: { isPrimary: true }, take: 1 },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            });
+          }
+        }
+      }
+
+      if (userCart) return userCart;
+    }
+
+    // Fallback: Find by sessionId or Create
     let cart = await prisma.cart.findFirst({
       where: userId ? { userId } : { sessionId },
       include: {

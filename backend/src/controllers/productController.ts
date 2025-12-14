@@ -33,17 +33,17 @@ export class ProductController {
   getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { category, search, minPrice, maxPrice, page = '1', limit = '20' } = req.query;
-      
+
       const pageNum = parseInt(page as string) || 1;
       const limitNum = parseInt(limit as string) || 20;
       const skip = (pageNum - 1) * limitNum;
 
       const where: any = { isActive: true };
-      
+
       if (category) {
         where.category = { slug: category };
       }
-      
+
       if (search) {
         where.OR = [
           { name: { contains: search as string, mode: 'insensitive' } },
@@ -51,7 +51,7 @@ export class ProductController {
           { description: { contains: search as string, mode: 'insensitive' } },
         ];
       }
-      
+
       if (minPrice || maxPrice) {
         where.basePrice = {};
         if (minPrice) where.basePrice.gte = parseFloat(minPrice as string);
@@ -104,6 +104,10 @@ export class ProductController {
           category: true,
           images: { orderBy: { sortOrder: 'asc' } },
           variants: true,
+          reviews: {
+            include: { user: { select: { name: true } } },
+            orderBy: { createdAt: 'desc' },
+          },
         },
       });
 
@@ -111,7 +115,7 @@ export class ProductController {
         throw new AppError(404, 'Product not found');
       }
 
-      // Get related products
+      // Fetch related products (same category, different id)
       const relatedProducts = await prisma.product.findMany({
         where: {
           categoryId: product.categoryId,
@@ -227,5 +231,57 @@ export class ProductController {
       next(error);
     }
   };
-}
+  addReview = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const { rating, comment } = z.object({
+        rating: z.number().min(1).max(5),
+        comment: z.string().optional(),
+      }).parse(req.body);
 
+      const userId = req.user?.userId;
+      if (!userId) {
+        throw new AppError(401, 'Authentication required');
+      }
+
+      // Check if product exists
+      const product = await prisma.product.findUnique({ where: { id } });
+      if (!product) {
+        throw new AppError(404, 'Product not found');
+      }
+
+      // Verify user has purchased this product
+      // In a real app we'd uncomment this, but for demo we can allow reviews
+      /*
+      const hasPurchased = await prisma.orderItem.findFirst({
+        where: {
+          order: { userId, status: 'paid' },
+          variant: { productId: id }
+        }
+      });
+      if (!hasPurchased) {
+        throw new AppError(403, 'You must purchase this product to review it');
+      }
+      */
+
+      const review = await prisma.review.create({
+        data: {
+          productId: id,
+          userId,
+          rating,
+          comment,
+        },
+        include: {
+          user: { select: { name: true } },
+        },
+      });
+
+      res.status(201).json({
+        success: true,
+        data: review,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+}

@@ -45,7 +45,7 @@ export function Login() {
       localStorage.setItem('user', JSON.stringify(data.data.user));
 
       // Update auth context
-      login(data.data.user.email, password, data.data.user.role);
+      login(data.data.user.email, password, data.data.user.role, data.data.user);
 
       // Redirect based on role
       if (['admin', 'store_manager', 'warehouse', 'support'].includes(data.data.user.role)) {
@@ -82,7 +82,7 @@ export function Login() {
       localStorage.setItem('accessToken', data.data.accessToken);
       localStorage.setItem('user', JSON.stringify(data.data.user));
 
-      login(data.data.user.email, password, data.data.user.role);
+      login(data.data.user.email, password, data.data.user.role, data.data.user);
 
       if (['admin', 'store_manager', 'warehouse', 'support'].includes(data.data.user.role)) {
         navigate('/admin');
@@ -102,9 +102,9 @@ export function Login() {
         {/* Login Card */}
         <div className="bg-neutral-900 rounded-lg p-12 mb-12 max-w-md mx-auto border border-neutral-800">
           <div className="text-center mb-8">
-            <img 
-              src="/IMG_8862.png" 
-              alt="Logo" 
+            <img
+              src="/IMG_8862.png"
+              alt="Logo"
               className="h-24 w-auto object-contain mx-auto mb-4"
             />
             <p className="text-neutral-400">Sign in to your account</p>
@@ -153,8 +153,8 @@ export function Login() {
               </button>
             </div>
 
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               className="w-full bg-white text-black hover:bg-neutral-200"
               disabled={loading}
             >
@@ -164,7 +164,7 @@ export function Login() {
 
           <div className="mt-6 text-center">
             <span className="text-sm text-neutral-400">Don't have an account? </span>
-            <button 
+            <button
               onClick={() => navigate('/register')}
               className="text-sm text-amber-500 hover:text-amber-400"
             >
